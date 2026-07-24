@@ -1,5 +1,4 @@
 <script lang="ts">
-  // --- Daily answer logic (yours) ---
   function getUKDateString() {
     return new Date().toLocaleDateString("en-GB", { timeZone: "Europe/London" });
   }
@@ -14,42 +13,96 @@
   }
 
   const answer = dailyNumberUK();
+  const todayUK = getUKDateString();
 
-  // --- Game config ---
   const DIGITS = 4;
   const MAX_GUESSES = 4;
 
   type CellStatus = "empty" | "typed" | "correct" | "present" | "absent";
   type Cell = { digit: string; status: CellStatus };
 
-  // Grid state: 4 rows × 4 cells
   let grid: Cell[][] = Array.from({ length: MAX_GUESSES }, () =>
     Array.from({ length: DIGITS }, () => ({ digit: "", status: "empty" as CellStatus }))
   );
 
-  // Which row is currently being typed into
   let activeRow = 0;
-
-  // Keep track of whether game is solved
   let solved = false;
-
-  // Hidden input value (what user is typing for the active row)
   let current = "";
-
   let hiddenInput: HTMLInputElement | null = null;
 
+  let gameOver = false;
+  let resultMessage = "Enter 4 digits to make your first guess.";
+
+  // storage keys
+  const PLAY_KEY = "numberGuess_lastPlayedUK";
+  const SNAPSHOT_KEY = "numberGuess_snapshot_v1";
+
+  type Snapshot = {
+    date: string;
+    grid: Cell[][];
+    activeRow: number;
+    solved: boolean;
+    gameOver: boolean;
+    resultMessage: string;
+  };
+
+  function saveSnapshot() {
+    if (typeof window === "undefined") return;
+    const snap: Snapshot = {
+      date: todayUK,
+      grid,
+      activeRow,
+      solved,
+      gameOver,
+      resultMessage
+    };
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snap));
+  }
+
+  function restoreSnapshotIfToday() {
+    if (typeof window === "undefined") return;
+
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return;
+
+    try {
+      const snap = JSON.parse(raw) as Snapshot;
+      if (snap.date !== todayUK) return;
+
+      grid = snap.grid;
+      activeRow = snap.activeRow;
+      solved = snap.solved;
+      gameOver = snap.gameOver;
+      resultMessage = snap.resultMessage;
+    } catch {
+      // ignore bad data
+    }
+  }
+
+  // restore board first
+  restoreSnapshotIfToday();
+
+  // then enforce lock message if needed
+  if (typeof window !== "undefined") {
+    const lastPlayed = localStorage.getItem(PLAY_KEY);
+    if (lastPlayed === todayUK) {
+      gameOver = true;
+      if (!resultMessage || resultMessage === "Enter 4 digits to make your first guess.") {
+        resultMessage = "You already played today. Come back tomorrow.";
+      }
+    }
+  }
+
   function focusInput() {
-    hiddenInput?.focus();
+    if (!gameOver) hiddenInput?.focus();
   }
 
   function scoreGuess(rawGuess: string, answerStr: string): CellStatus[] {
     const g = rawGuess.split("");
     const a = answerStr.split("");
-
     const statuses: CellStatus[] = Array(DIGITS).fill("absent");
     const used = Array(DIGITS).fill(false);
 
-    // Pass 1: correct
     for (let i = 0; i < DIGITS; i++) {
       if (g[i] === a[i]) {
         statuses[i] = "correct";
@@ -57,10 +110,8 @@
       }
     }
 
-    // Pass 2: present
     for (let i = 0; i < DIGITS; i++) {
       if (statuses[i] === "correct") continue;
-
       const idx = a.findIndex((ad, j) => !used[j] && ad === g[i]);
       if (idx !== -1) {
         statuses[i] = "present";
@@ -72,16 +123,12 @@
   }
 
   function renderTypedRow() {
-    // Update the visible circles in the active row as the user types
     for (let col = 0; col < DIGITS; col++) {
       const ch = current[col] ?? "";
-      grid[activeRow][col] = {
-        digit: ch,
-        status: ch ? "typed" : "empty"
-      };
+      grid[activeRow][col] = { digit: ch, status: ch ? "typed" : "empty" };
     }
-    // force reactivity by reassigning grid (because we mutate nested arrays)
     grid = grid.map((r) => r.map((c) => ({ ...c })));
+    saveSnapshot();
   }
 
   function commitRowIfComplete() {
@@ -90,68 +137,61 @@
     const statuses = scoreGuess(current, answer);
 
     for (let col = 0; col < DIGITS; col++) {
-      grid[activeRow][col] = {
-        digit: current[col],
-        status: statuses[col]
-      };
+      grid[activeRow][col] = { digit: current[col], status: statuses[col] };
     }
     grid = grid.map((r) => r.map((c) => ({ ...c })));
 
     if (statuses.every((s) => s === "correct")) {
       solved = true;
+      gameOver = true;
+      resultMessage = `🎉 You got it in ${activeRow + 1}/${MAX_GUESSES} guesses!`;
+      localStorage.setItem(PLAY_KEY, todayUK);
+      saveSnapshot();
       return;
     }
 
     activeRow += 1;
     current = "";
 
-    // If out of rows, stop
     if (activeRow >= MAX_GUESSES) {
-      activeRow = MAX_GUESSES; // lock
+      activeRow = MAX_GUESSES;
+      gameOver = true;
+      resultMessage = `Unlucky — out of guesses. Today's number was ${answer}.`;
+      localStorage.setItem(PLAY_KEY, todayUK);
+      saveSnapshot();
       return;
     }
 
-    // Prepare next row (clear it to empty)
+    resultMessage = `Guess ${activeRow + 1} of ${MAX_GUESSES}`;
     renderTypedRow();
   }
 
   function onHiddenInput(e: Event) {
-    if (solved) return;
+    if (gameOver) return;
     if (activeRow >= MAX_GUESSES) return;
 
     const value = (e.currentTarget as HTMLInputElement).value;
-
-    // digits only, max length 4
     current = value.replace(/\D/g, "").slice(0, DIGITS);
 
-    // keep hidden input in sync (so backspace/paste behaves predictably)
     if (hiddenInput) hiddenInput.value = current;
-
     renderTypedRow();
 
-    // auto-submit when 4 digits typed
     if (current.length === DIGITS) {
       commitRowIfComplete();
-      // clear hidden input after commit
       if (hiddenInput) hiddenInput.value = "";
     }
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    // allow backspace even when hidden input is empty but we still have current
-    if (e.key === "Backspace") {
-      // Let the browser do default backspace in the hidden input.
-      // We just sync on input event.
-      return;
-    }
+    if (e.key === "Backspace") return;
   }
 </script>
 
 <section class="page">
   <div class="container">
     <h1 class="title">Guess the four digit number for today!</h1>
+    <p class="status" aria-live="polite">{resultMessage}</p>
 
-    <!-- Hidden input: captures typing reliably (desktop + mobile) -->
     <input
       class="hidden-capture"
       bind:this={hiddenInput}
@@ -169,6 +209,7 @@
       on:click={focusInput}
       on:focus={focusInput}
       aria-label="Guess board (click or focus to start typing)"
+      disabled={gameOver}
     >
       <section class="board" aria-label="Guess board">
         {#each grid as row, r}
@@ -189,9 +230,6 @@
         {/each}
       </section>
     </button>
-
-    <!-- For debugging while building; remove later -->
-    <!-- <p>answer: {answer}</p> -->
   </div>
 </section>
 
@@ -224,13 +262,32 @@
     line-height: 1.15;
   }
 
-  /* hidden input that still receives focus/keyboard */
+  .status {
+    margin: 0;
+    min-height: 1.5em;
+    text-align: center;
+    color: #d8d8d8;
+    font-weight: 600;
+  }
+
   .hidden-capture {
     position: absolute;
     opacity: 0;
     pointer-events: none;
     width: 1px;
     height: 1px;
+  }
+
+  .board-button {
+    background: transparent;
+    border: 0;
+    padding: 0;
+    color: inherit;
+  }
+
+  .board-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
   }
 
   .board {
@@ -256,12 +313,10 @@
     background: transparent;
   }
 
-  /* the row currently being typed into */
   .active-row {
     border-color: #666;
   }
 
-  /* typing (not submitted yet) */
   .typed {
     background: rgba(255, 255, 255, 0.06);
     border-color: #555;
