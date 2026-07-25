@@ -237,7 +237,7 @@
 	<!-- game UI -->
 
 	<p class="privacy-link">
-		<a href="https://www.damper.dev/privacy-number-guess" target="_blank" rel="noopener noreferrer">
+		<a href="https://www.damper.dev/privacy/number-guess" target="_blank" rel="noopener noreferrer">
 			Privacy
 		</a>
 	</p>
