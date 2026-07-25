@@ -233,6 +233,16 @@
   </div>
 </section>
 
+<section class="container">
+	<!-- game UI -->
+
+	<p class="privacy-link">
+		<a href="https://damper.dev/privacy-number-guess" target="_blank" rel="noopener noreferrer">
+			Privacy
+		</a>
+	</p>
+</section>
+
 <style>
   :global(body) {
     margin: 0;
@@ -345,4 +355,21 @@
     border-color: #538d4e;
     color: #111;
   }
+
+.privacy-link {
+	margin-top: 0.75rem;
+	text-align: center;
+	font-size: 0.85rem;
+	opacity: 0.85;
+}
+
+.privacy-link a {
+	color: #bdbdbd;
+	text-decoration: none;
+}
+
+.privacy-link a:hover {
+	text-decoration: underline;
+}
+
 </style>
