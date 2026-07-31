@@ -29,29 +29,3 @@ If you already completed today’s game, the UI shows a lock message and asks yo
 
 Privacy page:
 - https://www.damper.dev/privacy/number-guess
-
-## Development
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run locally:
-
-```bash
-npm run dev
-```
-
-Build for production:
-
-```bash
-npm run build
-```
-
-Preview production build:
-
-```bash
-npm run preview
-```
